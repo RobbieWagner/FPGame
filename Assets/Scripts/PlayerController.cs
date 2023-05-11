@@ -6,11 +6,12 @@ using UnityEngine.InputSystem;
 public class PlayerController : MonoBehaviour
 {
     private PlayerInput controls;
-    [SerializeField] private float moveSpeed = 6f;
-    private Vector3 velocity;
+    public float moveSpeed = 6f;
+    public Vector3 velocity;
     private float gravity = -9.8f;
+    [SerializeField] private float gravityFactor = 1f;
 
-    private Vector2 move;
+    [HideInInspector] public Vector2 move;
     private float jumpHeight = 2.4f;
     private CharacterController controller;
 
@@ -19,14 +20,26 @@ public class PlayerController : MonoBehaviour
     public float distanceToGround = .5f;
 
     public LayerMask groundMask;
-    private bool isGrounded;
+    [HideInInspector] public bool isGrounded;
+    [HideInInspector] public bool isRunning;
+    [HideInInspector] public bool canWallRun;
+    [HideInInspector] public bool isWallRunning;
+    [HideInInspector] public bool useGravity;
+
+    [SerializeField] private WallRun wallRun;
 
     private void Awake() 
     {
         controls = new PlayerInput();
         controller = GetComponent<CharacterController>();
-    }
 
+        isRunning = false;
+        isWallRunning = false;
+        useGravity = true;
+
+        controls.Player.Run.started += CollectionExtensions => StartRun();
+        controls.Player.Run.canceled += CollectionExtensions => StopRun();
+    }
 
     // Update is called once per frame
     void Update()
@@ -38,22 +51,34 @@ public class PlayerController : MonoBehaviour
 
     private void Grav()
     {
-        isGrounded = Physics.CheckSphere(ground.position, distanceToGround, groundMask);
-        if(isGrounded && velocity.y < 0)
+        if(useGravity)
         {
-            velocity.y = -2f;
-        }
+            isGrounded = Physics.CheckSphere(ground.position, distanceToGround, groundMask);
+            if(isGrounded && velocity.y < 0)
+            {
+                velocity.y = -2f;
+                canWallRun = true;
+            }
 
-        velocity.y += gravity * Time.deltaTime;
-        controller.Move(velocity * Time.deltaTime);
+            velocity.y += gravity * Time.deltaTime * gravityFactor;
+            controller.Move(velocity * Time.deltaTime);
+        }
+        
     }
 
     private void PlayerMovement()
     {
         move = controls.Player.Movement.ReadValue<Vector2>();
 
-        Vector3 movement = (move.y * transform.forward) + (move.x * transform.right);
-        controller.Move(movement * moveSpeed * Time.deltaTime);
+        if(!isWallRunning)
+        {
+            Vector3 movement = (move.y * transform.forward) + (move.x * transform.right);
+            controller.Move(movement * moveSpeed * Time.deltaTime);
+        }
+        else if(wallRun != null) 
+        {
+            wallRun.WallRunningMovement();
+        }
     }
 
     private void Jump()
@@ -61,6 +86,24 @@ public class PlayerController : MonoBehaviour
         if(controls.Player.Jump.triggered && isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        }
+    }
+
+    private void StartRun()
+    {
+        if(!isRunning)
+        {
+            isRunning = true;
+            moveSpeed *= 2;
+        }
+    }
+    
+    private void StopRun()
+    {
+        if(isRunning)
+        {
+            isRunning = false;
+            moveSpeed /= 2;
         }
     }
 
